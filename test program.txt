@@ -1,0 +1,72 @@
+import Part
+import importOCA
+import FreeCADGui
+from PySide.QtGui import *
+
+class MyWindow(QWidget):
+
+	# Init for Gui Window
+	def __init__(self):
+		super(MyWindow, self).__init__()
+		self.btnLoad = QPushButton("Load")
+		self.btnLoad.clicked.connect(self.btnClick)
+		layout = QVBoxLayout()
+		layout.addWidget(self.btnLoad)
+		self.setLayout(layout)
+		self.setWindowFlags(Qt.WindowStaysOnTopHint)
+		self.show()
+
+	# Load file button
+	def btnClick(self):
+		fname = QFileDialog.getOpenFileName(self, "Open File", "", "Text Files ( *.txt )")
+		if (fname[0] != ""):
+			f = open(fname[0],"r")
+			no = 1
+			for line in f:
+				tensor = []
+				lstData = line.split(";")
+				for i in range(3):
+					val = lstData[i].split(",")
+					val_list = [int(num) for num in val]
+					tensor.append(val_list)
+				offset = float(lstData[3])
+				locate(tensor,offset,no)
+				no += 1
+
+# Create single box by given place and rotation
+def addBox(offset, position, rotation):
+	tempBox = FreeCAD.ActiveDocument.addObject("Part::Box", "tempBox")
+	tempBox.Length = offset
+	tempBox.Width = offset
+	tempBox.Height = offset
+	tempBox.Placement = FreeCAD.Placement(position, rotation)
+	return tempBox
+
+# Put box to where it should have one
+def locate(tensor,offset,no):
+	doc = FreeCAD.newDocument()
+	for floor in range(len(tensor)):
+		for index in range(len(tensor[floor])):
+			if tensor[floor][index] == 1:
+				y = index % 3 * offset
+				x = index // 3 * offset
+				z = floor * offset
+				position = FreeCAD.Vector(x,y,z)
+				rotation = FreeCAD.Rotation(0,0,0)
+				tempBox = addBox(offset,position,rotation)
+				FreeCADGui.Selection.addSelection(tempBox)
+
+	# Select whole stack for export
+	__objs__ = FreeCADGui.Selection.getSelection()
+	FreeCADGui.Selection.clearSelection()
+
+	# Fit for view and zoom
+	Gui.activeDocument().activeView().viewIsometric()
+	Gui.SendMsgToActiveView("ViewFit")
+	
+	# Finish export
+	FreeCADGui.export(__objs__,u"/Users/sitongjin/Documents/research/Samples/test"+str(no)+".pdf")
+	doc.recompute()
+
+# Evoke the window
+app = MyWindow()
