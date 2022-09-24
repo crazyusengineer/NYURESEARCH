@@ -1,0 +1,120 @@
+import Part
+import importOCA
+import FreeCADGui
+from PySide.QtGui import *
+import math
+from pivy import coin
+import random
+
+class MyWindow(QWidget):
+
+	# Init for Gui Window
+	def __init__(self):
+		super(MyWindow, self).__init__()
+		self.btnLoad = QPushButton("Load")
+		self.btnLoad.clicked.connect(self.btnClick)
+		layout = QVBoxLayout()
+		layout.addWidget(self.btnLoad)
+		self.setLayout(layout)
+		self.setWindowFlags(Qt.WindowStaysOnTopHint)
+		self.show()
+
+	# Load file button
+	def btnClick(self):
+		fname = QFileDialog.getOpenFileName(self, "Open File", "", "Text Files ( *.txt )")
+		if (fname[0] != ""):
+			f = open(fname[0],"r")
+			no = 1
+			for line in f:
+				tensor = []
+				lstData = line.split(";")
+				for i in range(3):
+					val = lstData[i].split(",")
+					val_list = [int(num) for num in val]
+					tensor.append(val_list)
+				offset = float(lstData[3])
+
+				# Generate original stack and 3 corresponding correct answer
+				locate(tensor,offset,no,"Original")
+				# Generate negative sample stack
+				locate(genNegative(tensor),offset,no,"Mirror")
+
+				#FreeCAD.closeDocument(mirrorDoc.Name)
+				no += 1
+
+# Create single box by given place and rotation
+def addBox(offset, position, rotation):
+	tempBox = FreeCAD.ActiveDocument.addObject("Part::Box", "tempBox")
+	tempBox.Length = offset
+	tempBox.Width = offset
+	tempBox.Height = offset
+	tempBox.Placement = FreeCAD.Placement(position, rotation)
+	return tempBox
+
+# Method for View-Rotation
+def RotateView(axisX=1.0,axisY=0.0,axisZ=0.0,angle=45.0):
+	try:
+		cam = Gui.ActiveDocument.ActiveView.getCameraNode()
+		rot = coin.SbRotation()
+		rot.setValue(coin.SbVec3f(axisX,axisY,axisZ),math.radians(angle))
+		nrot = cam.orientation.getValue() * rot
+		cam.orientation = nrot
+	except Exception:
+		print( "Not ActiveView ")
+
+# Method for negative sample generation
+def genNegative(tensor):
+	mirror_tensor = []
+	for i in range(3):
+		mirror_tensor.append([tensor[i][6],tensor[i][7],tensor[i][8],tensor[i][3],tensor[i][4],tensor[i][5],tensor[i][0],tensor[i][1],tensor[i][2]])
+	return mirror_tensor
+	
+# Put box to where it should have one
+def locate(tensor,offset,no,mode):
+	doc = FreeCAD.newDocument()
+	for floor in range(len(tensor)):
+		for index in range(len(tensor[floor])):
+			if tensor[floor][index] == 1:
+				y = index % 3 * offset
+				x = index // 3 * offset
+				z = floor * offset
+				centre = FreeCAD.Vector(x+0.5*offset,y+0.5*offset,z+0.5*offset)
+				position = FreeCAD.Vector(x,y,z)
+				rotation = FreeCAD.Rotation(0,0,0)
+				tempBox = addBox(offset,position,rotation)
+				FreeCADGui.Selection.addSelection(tempBox)
+	# Select whole stack for export
+	__objs__ = FreeCADGui.Selection.getSelection()
+	FreeCADGui.Selection.clearSelection()
+	# Fit for view and zoom
+	Gui.activeDocument().activeView().viewIsometric()
+	Gui.SendMsgToActiveView("ViewFit")
+	# Finish export
+	outdir = 'Dataset'
+	outdir_test = '500'
+	if mode == "Original":
+		FreeCADGui.export(__objs__,u"/Users/sitongjin/Documents/haohan/output" + outdir_test + "/Stack"+str(no)+".pdf")
+		RotateView(1,0,0,45)
+		FreeCADGui.export(__objs__,u"/Users/sitongjin/Documents/haohan/output" + outdir_test + "/Stack"+str(no)+"-X.pdf")
+		RotateView(1,0,0,-45)
+		RotateView(0,1,0,45)
+		FreeCADGui.export(__objs__,u"/Users/sitongjin/Documents/haohan/output" + outdir_test + "/Stack"+str(no)+"-Y.pdf")
+		RotateView(0,1,0,-45)
+		RotateView(0,0,1,45)
+		FreeCADGui.export(__objs__,u"/Users/sitongjin/Documents/haohan/output" + outdir_test + "/Stack"+str(no)+"-Z.pdf")
+		RotateView(0,0,1,-45)
+	if mode == "Mirror":
+		operand = random.randint(0,2)
+		if(operand==0):
+			RotateView(1,0,0,45)
+		elif(operand==1):
+			RotateView(0,1,0,45)
+		else:
+			RotateView(0,0,1,45)
+		FreeCADGui.export(__objs__,u"/Users/sitongjin/Documents/haohan/output" + outdir_test + "/Stack"+str(no)+"-Mirror.pdf")
+	FreeCAD.closeDocument(doc.Name)
+	# May not need recomputer
+	# doc.recompute()
+
+# Evoke the window
+app = MyWindow()
